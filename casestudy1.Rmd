@@ -1,0 +1,173 @@
+---
+title: "Case study1"
+author: "Hongzhang Cheng"
+date: "2/16/2017"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+###Content and Motivation
+In this project, I collected 200 tweets data for  #WPI topic, the reason I choose this topic because I am a WPI student and I want to know what is the most up-to-data topic these days around the school, and which group of students Twitter are most popular with.
+
+###How did I analyze the data
+I followed the instruction of the projects and did all three problems.
+This is all the library I used:
+
+```{r, echo=F}
+library(SnowballC)
+library(twitteR)
+library(stringr)
+library(plyr)
+library(tm)
+```
+
+And this is the token I used for collecting data from twitter:
+```{r,echo=F}
+consumerKey=	"yj31kCoNBtEdqngCZhMfDy50z"
+consumerSecret = "UXzLjd28iqtHhTG7idZnkWevtXqzNKX3JiPvtdgjvf40YTLKtq"
+accessToken = 	"831236285587152898-UgYnsKa62pKOi8IZ4O9U88ir4ObYzQt"
+accessTokenSecret = 	"Qr3AC4k15Ji0TRSNUUHxSipmMlNAPUTCuW0vyoIdlGn97"
+```
+
+## Problem 1: Sampling Twitter Data with Streaming API about a certain topic
+
+- The topic of interest: < WPI >
+- The total number of tweets collected: < 200 >
+
+This is the Twitter Streaming API I used to sample the tweets and store them in a tweetsWPI.csv file.
+
+```{r, echo=F}
+setup_twitter_oauth(consumerKey, consumerSecret, accessToken, accessTokenSecret)
+tweets = searchTwitter('#WPI', n=200)
+
+tweetsDF = twListToDF(tweets)
+
+write.csv(tweetsDF,file = "tweetsWPI.csv")
+```
+
+## Problem 2: Analyzing Tweets and Tweet Entities with Frequency Analysis
+- Use the tweets you collected in Problem 1, and compute the frequencies of the words being used in these tweets.
+```{r}
+myWPI <- Corpus(VectorSource(tweetsDF$text))
+myWPI <- tm_map(myWPI, content_transformer(tolower),lazy = TRUE)
+myWPI <- tm_map(myWPI, removePunctuation,lazy=TRUE)
+myWPI <- tm_map(myWPI, removeNumbers,lazy = TRUE)
+removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
+myWPI <- tm_map(myWPI, content_transformer(removeURL),lazy = TRUE) 
+myWPI <- tm_map(myWPI, removeWords, stopwords("english"),lazy = TRUE)
+
+
+myWPI <- tm_map(myWPI, stemDocument,lazy = TRUE)
+
+tdm <- TermDocumentMatrix(myWPI, control = list(wordLengths = c(1, Inf)))
+temp <- inspect(tdm)
+FreqMat <- data.frame(ST = rownames(temp), Freq = rowSums(temp))
+row.names(FreqMat) <- NULL
+```
+
+```{r}
+FreqMat
+```
+FreqMat is the table I create for the frequency of the words being used in these tweets.
+In this analysis, I at first preprocess the data using R nature language processing package. I turn all the words in to the lower case, and remove all the punctuations, digits and URL, after that I get rid of the tail of some words, like cat and cats should be the same word in analysis. Then I make the turn the data into a matrix and make them as a dataframe FreqMat.
+
+- Display a table of the top 30 words with their counts
+```{r}
+sortF <- FreqMat[order(-FreqMat$Freq),]
+sortF <- sortF[1:30,]
+sortF
+```
+After I got the top 30 words,I find lots of words with information is about money demonetization and surgical strike happened in Indian, and economic. So I think Twitter must be very popular in Indian group in WPI, and most of the Indians here focus on the money demonetization problem.  
+
+
+**2. Find the most popular tweets in your collection of tweets**
+
+- Please display a table of the top 10 tweets that are the most popular among your collection, i.e., the tweets with the largest number of retweet counts.
+```{r}
+populart <- tweetsDF[order(-tweetsDF$retweetCount), 1]
+populart <- populart[1:10]
+populart
+```
+
+**3. Find the most popular Tweet Entities in your collection of tweets**
+
+Please display a table of the top 10 hashtags, top 10 user mentions that are the most popular in your collection of tweets.
+```{r,echo=F}
+hashtagst = str_extract_all(tweetsDF$text, "#\\w+")
+alhash <- unlist(hashtagst)
+hash_freq <- Corpus(VectorSource(alhash))
+t <- TermDocumentMatrix(hash_freq, control = list(wordLengths = c(1, Inf)))
+t<- inspect(t)
+hash_freq <- data.frame(hashtag = rownames(t), Freq = rowSums(t))
+row.names(hash_freq)<-NULL
+hash_freq <- hash_freq[order(-hash_freq$Freq),]
+hash_freq<-hash_freq[1:10,]
+```
+
+```{r}
+hash_freq 
+```
+
+```{r,echo=F}
+ment = str_extract_all(tweetsDF$text, "@\\w+")
+almen <- unlist(ment)
+men_freq <- Corpus(VectorSource(almen))
+m <- TermDocumentMatrix(men_freq, control = list(wordLengths = c(1, Inf)))
+m<- inspect(m)
+men_freq <- data.frame(hashtag = rownames(m), Freq = rowSums(m))
+row.names(men_freq)<-NULL
+men_freq <- men_freq[order(-men_freq$Freq),]
+men_freq<-men_freq[1:10,]
+```
+
+```{r}
+men_freq
+```
+This gives us the same information as last problem, most of the information is about Indian money demonetization and surgical strike.
+
+## Problem 3: Getting "All" friends and "All" followers of a popular user in twitter
+
+- Choose a popular twitter user who has many followers, such as @hadleywickham.
+- Get the list of all friends and all followers of the twitter user.
+- Display 20 out of the followers, Display their ID numbers and screen names in a table.
+- Display 20 out of the friends (if the user has more than 20 friends), Display their ID numbers and screen names in a table.
+- Compute the mutual friends within the two groups, i.e., the users who are in both friend list and follower list, Display their ID numbers and screen names in a table
+
+```{r}
+user <- getUser('@amanrana20')
+friends <- user$getFriends() 
+followers <- user$getFollowers()
+
+friendM <-matrix(ncol = 2,nrow = length(friends) )
+i<-1
+for(friend in friends)
+{ friendM[i,] <-c(friend$id,friend$screenName) 
+  i<-i+1
+}
+
+followerM <-matrix(ncol = 2,nrow = length(followers) )
+i<-1
+for(follower in followers)
+{ followerM[i,] <-c(follower$id,follower$screenName) 
+i<-i+1
+}
+
+friendDF <- data.frame(friendM)
+colnames(friendDF) <- c("ID", "ScreenName")
+
+followerDF <- data.frame(followerM)
+colnames(followerDF) <- c("ID", "ScreenName")
+
+friends20 <-friendDF[1:20,]
+followers20 <- followerDF[1:20,]
+
+mutual_f<-merge(friendDF, followerDF)
+friends20
+followers20
+mutual_f
+
+```
+
+I used my friends' tweet account and find all his friends and followers, I find 8 mutual friends in his friends and followers.
+
